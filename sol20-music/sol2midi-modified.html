@@ -1,0 +1,1543 @@
+<html><head><title>SOL</title>
+
+<meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+
+<!--
+<script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/focus-visible@5,npm/html-midi-player@1.5.0"></script>
+-->
+
+<script src="tone_magenta-music_core_focus-visible_html-midi-player1_5_0.js"></script>
+
+<script src="FileSaver.js"></script>
+
+<script language="JavaScript">
+// 01:48 11.04.2010
+// Tested in Mozilla-FireFox and Opera
+// Sorry, Chrome can't played and i now don't know method to resolve this bug...
+// thanks to http://www.sol20.org/ archive!
+// and http://emuverse.ru/wiki/%u0420%u0430%u0434%u0438%u043E-86%u0420%u041A/%u0420%u0430%u0434%u0438%u043E_10-88/%u041C%u0443%u0437%u044B%u043A%u0430%u043B%u044C%u043D%u0430%u044F_%u0441%u0438%u0441%u0442%u0435%u043C%u0430
+// NEW VERSION AT http://softrash.googlecode.com/files/sol2midi.html
+//////////////////////////////////////////////////////////////////////////////
+// hints for me self:
+// MODE       WHOLE NOTE DURATION
+// staccato , - XXX$$$      width=3, pause=3
+// dotted   . - XXXXXXXXX   width=9, pause=0
+// tripled  : - XXYYZZ      width=2, pause=0
+//////////////////////////////////////////////////////////////////////////////
+var
+ timeoutId = 0
+,player = (
+ function (fileName) {
+
+    this.play = function(stream) {
+
+        tmp_my_uint8_array = Uint8Array.from(stream, c => c.charCodeAt(0)); 
+
+        //var bc = new Blob([tmp_my_uint8_array], { type: "application/octet-stream" });
+        //saveAs(bc, "hello world.mid");
+
+        vis3 = document.getElementById("myVisualizer");
+        vis3.src = "";
+        vis3.src = stream.toBase64("data:audio/midi");
+
+        var bb = new Blob([tmp_my_uint8_array], { type: "application/octet-stream" });
+        var a = document.getElementById("MediaDownload");
+        a.download = 'download.mid';
+        a.href = window.URL.createObjectURL(bb);
+        //a.setAttribute("href", "data:x-www-form-urlencoded;charset=utf-8" + encodeURI(stream));
+
+        Player = document.getElementById("Media");
+        Player.src = "";
+        Player.src = stream.toBase64("data:audio/midi");
+    }
+
+  return this;
+ })("C:/sol2midi.mid");
+ 
+function dgebi(id) { return document.getElementById(id); }
+function dgebt(tag) { return document.getElementsByTagName(tag); }
+String.prototype.toMIDIheader =
+function (speed) {
+ tracks = 0;
+ pointer = 0;
+ while(this.substr(pointer, 4) == "MTrk") {
+  ++ tracks;
+  len = this.charCodeAt(pointer + 7) 
+         + (this.charCodeAt(pointer + 6) << 8)
+         + (this.charCodeAt(pointer + 5) << 16)
+         + (this.charCodeAt(pointer + 4) << 24);
+  if(len > 0)
+   pointer += 8 + len;
+  else {
+document.title="ERROR: track "+track+" length="+len;
+   break;
+  }
+ }
+ 
+ //alert("speed = " + speed);
+ 
+ tmptmp = "MThd\x00\x00\x00\x06"
+      + "\x00\x01"
+      + "\x00" + String.fromCharCode(tracks)
+      + String.fromCharCode((speed >> 8) & 255)
+      + String.fromCharCode(speed & 255)
+      + this + "";
+
+return tmptmp;
+};
+String.prototype.toMIDItrack =
+function () {
+ len = this.length + 9;
+ return "MTrk"
+      + String.fromCharCode((len >> 24) & 255)
+      + String.fromCharCode((len >> 16) & 255)
+      + String.fromCharCode((len >> 8) & 255)
+      + String.fromCharCode(len & 255)
+      + "\x00\xFF\x21\x01\x00" + this
+      + "\x7F\xFF\x2F\x00";
+}
+String.prototype.MIDInote =
+function (time, mode, note, loud) {
+ buf = "";
+ if(time < 128)
+  buf += String.fromCharCode(time); else
+ if(time < 16384)
+  buf += String.fromCharCode(0x80 | (time >> 7), time & 0x7F); else
+ if(time < 2097152)
+  buf += String.fromCharCode(0x80 | (time >> 14), 0x80 | ((time >> 7) & 0x7F), time & 0x7F);
+ buf += String.fromCharCode(0x80 | mode);
+ if(note < (isFinite(loud) ? 128 : 256))
+  buf += String.fromCharCode(note); else
+ if(note < 16384)
+  buf += String.fromCharCode(0x80 | (note >> 7), note & 0x7F); else
+ if(note < 2097152)
+  buf += String.fromCharCode(0x80 | (note >> 14), 0x80 | ((note >> 7) & 0x7F), note & 0x7F);
+ if(!isFinite(loud))
+  return this + buf;
+ if(loud < 128)
+  buf += String.fromCharCode(loud); else
+ if(loud < 16384)
+  buf += String.fromCharCode(0x80 | (loud >> 7), loud & 0x7F); else
+ if(loud < 2097152)
+  buf += String.fromCharCode(0x80 | (loud >> 14), 0x80 | ((loud >> 7) & 0x7F), loud & 0x7F);
+ return this + buf;
+}
+String.prototype.toBase64 =
+function (header) {
+ // Encodes data with MIME base64
+ // + original by: Tyler Akins (http://rumkin.com)
+ // + improved by: Bayron Guevara
+var b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+var enc = "", i = 0, o1, o2, o3, h1, h2, h3, h4, bits;
+ do { // pack three octets into four hexets
+  o1 = this.charCodeAt(i ++);
+  o2 = this.charCodeAt(i ++);
+  o3 = this.charCodeAt(i ++);
+  bits = o1 << 16 | o2 << 8 | o3;
+  h1 = bits >> 18 & 0x3f;
+  h2 = bits >> 12 & 0x3f;
+  h3 = bits >> 6 & 0x3f;
+  h4 = bits & 0x3f;
+  // use hexets to index into b64, and append result to encoded string
+  enc += b64.charAt(h1) + b64.charAt(h2) + b64.charAt(h3) + b64.charAt(h4);
+ } while (i < this.length);
+ switch(this.length % 3) {
+ case 1:
+  enc = enc.slice(0, -2) + "==";
+  break;
+ case 2:
+  enc = enc.slice(0, -1) + "=";
+  break;
+ }
+ return header + ";base64," + enc;
+}
+// 13:12 06.04.2010
+function parseSol(txt) {
+ baseTempo = 0;
+ baseSpeed = 0;
+ paraList = {};
+ currLine = 0;
+ currMark = 0;
+ currPara = "";
+ currTempo = 0;
+ currSpeed = 0;
+ currChan = 0;
+ currKey = 0;
+ currModes = "*Q";
+ forge = 65530;
+ text = txt.value.split(/\r?\n/);
+ for(i in text) {
+  column = text[i];
+  if(column.length < 2)
+   break;
+  j = column.indexOf(" ");
+  if(j < 0 || !isFinite(index = Number(column.substr(0, j))) || index <= currLine)
+   return "Error in " + ++ i + "(" + currLine + "): Bad line index";
+  currLine = index;
+  try {
+   if(forge -- <= 0)
+    return "Error in " + ++ i + "(" + currLine + "): Looped";
+   while(j && (j < column.length) && (forge -- > 0)) {
+    switch(data = column.charAt(++ j)) {
+    case " ":
+     break;
+    case "/":
+     j = 0;
+     break;
+    case "<": case ">":
+     ++ j;
+     break;
+    case "K":
+     data = column.charAt(++ j);
+     if(data != " ") {
+      if(!isFinite(index = Number(data)))
+       return "Error in " + ++ i + "(" + currLine + "): Bad alt-key";
+      currKey = index;
+      ++ j;
+     } else
+      currKey = 0;
+     break;
+    case "P":
+     data = column.charAt(++ j);
+     if((data.match(/[A-Z]/) < 0) || (paraList[data] && paraList[data].length))
+      return "Error in " + ++ i + "(" + currLine + "): Bad paragraph name " + paraList[data].length;
+     currPara = data;
+     currTempo = 0;
+     break;
+    case "M":
+     do {
+      data = column.charAt(++ j);
+     } while(data && data != " ");
+     document.title+=data;
+     data = currMark + 1;//parseInt(column.substr(++ j));
+     currChan = 0;
+     if(!isFinite(index = Number(data)) || index < currMark)
+      return "Error in " + ++ i + "(" + currLine + "): Bad marker index";
+     if(currPara && typeof(paraList[currPara]) == "string")
+      return "Error in " + ++ i + "(" + currLine + "): Bad repeat mix";
+     if(!currPara)
+      return "Error in " + ++ i + "(" + currLine + "): Paragraph inspected";
+     if(currMark == index) {
+      if(!currSpeed || !currTempo)
+       return "Error in " + ++ i + "(" + currLine + "): Bad marker mix";
+      break;
+     }
+     currMark = index;
+     if(!paraList[currPara]) {
+      if(!currTempo)
+       currTempo = baseTempo;
+      if(!currSpeed)
+       currSpeed = baseSpeed;
+      if(!currTempo && !currSpeed)
+       return "Error in " + ++ i + "(" + currLine + "): Undefined tempo/speed";
+      paraList[currPara] = {
+       tempo: currTempo
+      ,speed: currSpeed
+      ,alter: currKey
+      };
+     }
+     paraList[currPara][currMark] = {
+      chan: {0: "", 1: "", 2: "", 3: ""}
+     }
+     break;
+    case "N":
+     data = column.charAt(++ j);
+     if(currSpeed || (paraList[currPara] && paraList[currPara].speed))
+      return "Error in " + ++ i + "(" + currLine + "): Redefine speed";
+     switch(data) {
+     case "H": currSpeed = 8; break;
+     case "Q": currSpeed = 4; break;
+     case "I": currSpeed = 2; break;
+     case "S": currSpeed = 1; break;
+     default:
+      return "Error in " + ++ i + "(" + currLine + "): Only Half/Quarter/eIght/Sixteeth used";
+     }
+     baseSpeed = currSpeed;
+     break;
+    case "=":
+     do {
+      data = column.charAt(++ j);
+     } while(data == " ");
+     data += column.charAt(++ j);
+     if(currTempo || (paraList[currPara] && paraList[currPara].tempo))
+      return "Error in " + ++ i + "(" + currLine + "): Redefine tempo";
+     if(!currSpeed)
+      return "Error in " + ++ i + "(" + currLine + "): NH/NQ/NI/NS expected first";
+     currTempo = Number("0x" + data);
+     if(!isFinite(currTempo))
+      return "Error in " + ++ i + "(" + currLine + "): Hexadecimal 00..FF expected";
+     if(!currTempo)
+      currTempo = 256;
+     baseTempo = currTempo;
+     break;
+    case "R":
+     data = column.charAt(++ j);
+     many = data == "[" ? 1 : 0;
+     do {
+      if(many && (data = column.charAt(++ j)) == "]")
+       break;
+      if(!paraList[data] || !currPara || paraList[currPara] || (typeof(paraList[data]) == "string"))
+       return "Error in " + ++ i + "(" + currLine + "): Bad paragraph name '" + data + "'";
+      paraList[many ? currPara + many : currPara] = data;
+      if(many)
+       ++ many;
+     } while(many);
+     break;
+    case "V":
+     currChan = Number(column.charAt(++ j));
+     if(!isFinite(currChan) || -- currChan < 0 || currChan > 3 || (paraList && paraList[currPara] && paraList[currPara][currMark].chan[currChan]))
+      return "Error in " + ++ i + "(" + currLine + "): Bad voice channel" + paraList[currPara][currMark].chan[currChan];//document.title=currLine;
+     break;
+    default:
+     if(data && ("\x22\x23\x24\x25\x26\x2A\x2B\x2C\x2D\x2E\x3A0123456789@ABCDEFGWHQISTX\x5E".indexOf(data) >= 0)) {
+      switch(data) {
+      case "*": case "@":
+       currModes = data + currModes.charAt(1);
+       if(paraList[currPara][currMark].chan[currChan] == "")
+        continue;
+       break;
+      case "W": case "H": case "Q": case "I": case "S": case "T": case "X":
+       currModes = currModes.charAt(0) + data;
+       if(paraList[currPara][currMark].chan[currChan] == "")
+        continue;
+       break;
+      }
+      if(paraList[currPara][currMark].chan[currChan] == "")
+       paraList[currPara][currMark].chan[currChan] = currModes;
+      paraList[currPara][currMark].chan[currChan] += String(data);
+     }
+     break;
+    }
+   }
+  } catch(e) {
+   return "Error in " + ++ i + "(" + currLine + "): Fatal" + e;
+  }
+ }
+ return {record: paraList};
+}
+function compileSol(sol) {
+ str = {
+  0: "\x00\xC0\x51\x00\xE0\x40\x40\x00\xB0\x07\x7F"
+ ,1: "\x00\xC0\x51\x00\xE0\x40\x40\x00\xB0\x07\x5F"
+ ,2: "\x00\xC0\x51\x00\xE0\x40\x40\x00\xB0\x07\x3F"
+ ,3: "\x00\xC9\x51\x00\xE9\x40\x40\x00\xB9\x07\x3F"
+ };
+ for(paraId in sol) {
+  para = sol[paraId];
+  for(markId in para) {
+   mark = para[markId].chan;
+   chn = ["", "", "", ""];
+   dur = [0, 0, 0, 0];
+   for(chanId in mark) {
+    chan = mark[chanId];
+    duration = 2 * para.tempo * para.speed;
+    multiple = 6;
+    stand = 1;
+    times = 4;
+    late = 0;
+    portamento = 0;
+    chan.replace(/((\x5E[\x2B\x2D][0-9A-F])|([\x2E]?[\x2B\x2D]?[\x240-9A-G][\x23\x25\x26]?[\x22\x27\x2C]?)|([WHQISTX\x3A])|([\x2A\x40]))/g,
+    function (curr, ascii) {
+     vol = ascii == "$" ? 0 : 127;
+     time = duration * multiple * times;
+     pause = 0; note = 60 + portamento;
+     if(ascii.charAt(0) == ".")
+      ascii = ascii.substr(1)
+     ,time *= 1.5;
+     switch(ascii.charAt(ascii.length - 1)) {
+     case "#":
+      ++ note;
+      ascii = ascii.substr(0, ascii.length - 1);
+      break;
+     case "%":
+//      ++ note;
+      ascii = ascii.substr(0, ascii.length - 1);
+      break;
+     case "&":
+      -- note;
+      ascii = ascii.substr(0, ascii.length - 1);
+      break;
+     }
+     switch(ascii.charAt(ascii.length - 1)) {
+     case '"': // Long Articulation
+      time *= 1.5;
+      ascii = ascii.substr(0, ascii.length - 1);
+      break;
+     case "'": // Short Articulation
+      time /= 2;
+      ascii = ascii.substr(0, ascii.length - 1);
+      break;
+     case ",": // Stacatto
+      pause = time / 2; time -= pause;
+      ascii = ascii.substr(0, ascii.length - 1);
+      break;
+     }
+     switch(ascii) {
+     case ".": multiple = 9; return "";
+     case ":": multiple = 2; return "";
+     case "W": multiple = 6; times = 64; return "";
+     case "H": multiple = 6; times = 32; return "";
+     case "Q": multiple = 6; times = 16; return "";
+     case "I": multiple = 6; times = 8; return "";
+     case "S": multiple = 6; times = 4; return "";
+     case "T": multiple = 6; times = 2; return "";
+     case "X": multiple = 6; times = 1; return "";
+     case "@": stand = 0; return "";
+     case "*": stand = 1; return "";
+     case "-9": case "+9": note += stand ? -16:15; break;
+     case "-8": case "+8": note += stand ? -14:13; break;
+     case "-7": case "+7": note += stand ? -12:12; break;
+     case "-6": case "+6": note += stand ? -10:11; break;
+     case "-5": case "+5": note += stand ? -8 : 9; break;
+     case "-4": case "+4": note += stand ? -7 : 7; break; // NEW FEATURE!
+     case "-3": case "+3": note += stand ? -5 : 5; break;
+     case "-2": case "+2": note += stand ? -3 : 4; break;
+     case "-1": case "+1": note += stand ? -1 : 2; break;
+     case "0": note += stand ? 0 : 0; break;    // C     / C
+     case "1": note += stand ? 2 : -1; break;   // D    / B
+     case "2": note += stand ? 4 : -3; break;   // E    / A
+     case "3": note += stand ? 5 : -5; break;   // F    / G
+     case "4": note += stand ? 7 : -7; break;   // G    / F
+     case "5": note += stand ? 9 : -8; break;   // A    / E
+     case "6": note += stand ? 11 : -10; break; // B    / D
+     case "7": note += stand ? 12 : -12; break;  // C   / C
+     case "8": note += stand ? 14 : -13; break;  // D  / B
+     case "9": note += stand ? 16 : -15; break;  // E  / A
+     case "A": note += stand ? 17 : -17; break;  // F  / G
+     case "B": note += stand ? 19 : -19; break;  // G  / F
+     case "C": note += stand ? 21 : -20; break;  // A  / E
+     case "D": note += stand ? 23 : -22; break;  // B  / D
+     case "E": note += stand ? 24 : -24; break;   // C / C
+     case "F": note += stand ? 26 : -25; break;   // D/B
+     case "G": note += stand ? 27 : -27; break;  /// E/A
+     case "$": vol = 0; break;
+     default:
+      if(ascii.charAt(0) == "^" && isFinite(data = parseInt(ascii.substr(1), 16))) {
+       portamento = data;
+       return "";
+      } else
+       return "Unexpected error: Paragraph[" + paraId + "] Marker["+ markId + "] Channel#" + (chanId + 1) + " - " + ascii;
+      break;
+     }
+     note += chanId < 3 ? para.alter * 1 : 0;
+     dur[chanId] += time + pause;
+     chn[chanId] = chn[chanId].MIDInote(late, chanId == 3 ? 0x99 : 0x90, note, vol)
+                              .MIDInote(time, chanId == 3 ? 0x89 : 0x80, note, 0);
+     late = pause;
+     return "";
+    });
+   }
+   max = 0;
+   for(chanId in str) {
+    str[chanId] += chn[chanId];
+    if(max < dur[chanId])
+     max = dur[chanId];
+   }
+   for(chanId in str) {
+    if(dur[chanId] < max) {
+     time = max - dur[chanId];
+     str[chanId] += "".MIDInote(time, 0x80, 0x00, 0x00);
+    }
+   }
+  }
+ }
+ return str;
+}
+function parse(chans) {
+ txt = document.getElementsByTagName("textarea")[0];
+ sol = parseSol(txt);
+ if(typeof(sol) == "string") {
+  document.getElementById("res").innerHTML = sol;
+  return false;
+ }
+ sol = sol.record;
+ for(i in sol)
+  if(typeof(sol[i]) == "string") {
+   if(sol[sol[i]])
+    sol[i] = sol[sol[i]];
+   else {
+    document.getElementById("res").innerHTML = sol[i];
+    return false;
+   }
+  }
+ stream = compileSol(sol);
+ stream = (stream[0].toMIDItrack()
+         + stream[1].toMIDItrack()
+         + stream[2].toMIDItrack()
+         + (chans == 4 ? stream[3].toMIDItrack() : "")
+         ).toMIDIheader(32767)
+ player.play(stream);
+ document.getElementById("res").innerHTML = "";
+ setTimeout('document.getElementsByTagName("textarea")[0].focus()', 1250);
+ return false;
+}
+function rec(obj, n, r) { // Tiny debug utility for me-self
+var
+ res = '';
+ if(n > 1)
+  return r + " <-- limited!\n";
+ try {
+  for(i in obj) {
+   if(String(obj[i]).charAt(0) == '[')
+    res += rec(obj[i], n + 1, r + i + '.');
+   else
+    res += r + i + ' = ' + obj[i] + '\n';
+  }
+ }
+ catch(e) {
+  window.status = r + i + ' -> ERROR AT ' + n + ' :: ' + e;
+  return res + 'err\n';
+ }
+ return res;
+}
+
+function Load(anchor) {
+ anchor = anchor.lastChild;
+ document.getElementsByTagName("textarea")[0].value = anchor.outerText ? anchor.outerText : anchor.textContent;
+ return false;
+}
+</script>
+
+<style>
+
+a, textarea {
+ font-size: x-large;
+ margin: 10px;
+ padding: 10px;
+}
+
+.txt {
+ font-size: x-large;
+ float:left;
+}
+
+a.menuItem {
+ border-top: thin white outset;
+ border-left: thin white outset;
+ border-right: thin white outset;
+ border-bottom: none;
+ background: silver;
+ text-decoration: none;
+ font-family: Courier New, Lucida Console;
+ float:left; 
+}
+a.menuItem:hover {
+ border-top: thin white inset;
+ border-left: thin white inset;
+ border-right: thin white inset;
+ border-bottom: none;
+ background: silver;
+ text-decoration: none;
+ font-family: Courier New, Lucida Console;
+}
+span {
+ color: yellow;
+}
+textarea.Notes {
+ border: thin whitesmoke inset;
+ text-align: left;
+ outline: none;
+ overflow: auto;
+}
+body {
+ background: gray;
+}
+</style>
+
+</head>
+
+<body onload='document.getElementById("Notes").focus();'>
+<nobr>
+<span class="txt">Melody:</span>
+<a class='menuItem' href='' onclick='return Load(this)'>AIR<pre style='display: none'>
+0010 /AIR WITH VARIATIONS "HARMONIOUS BLACKSMITH"
+0020 /G.F. HANDEL
+0021 /
+0030 <1
+0040 K4# NI=50
+0050 /THEME
+0060 PA
+0070 M1 V3@QC1
+0080 PB
+0090 M2 *I24364S32 	V2@Q3I14$3 		V3@Q5I68Q5
+0100 M3 *I364Q7615# 	V2*Q-4I.2S2I.1S1Q0 	V3@I565C4354
+0110 M4 *I.6S$ 		V2*I.1 			V3@I.8
+0120 PC RB
+0130 PD
+0140 M5 *I6S96I76S4696 	V2*I24Q2I$-1 		V3@I3521$5
+0150 M6 *I76S4698'87'76'65T45S6 	V2@I+211+6*21+11
+0160 V3@123532345
+0170 M7 *Q3I6232S6432 	V2@Q+1I$101$1 		V3@I89A323$3
+0180 M8 *S31I26S231543I4S32 V2@I01$121*21 	V3@I23$ABC8F
+0190 M9 *I.2S$ 		V2QI.1 			V3@I.C
+0200 /VAR. I
+0210 PE
+0220 M10 *S2-14-13-16-14-12-1 V2@I$356$3 	V3@IC5Q45
+0230 M11 *S3-16-1427217610265# V2@Q45I4354 	V3Q156$3
+0240 M12 *Q6 		V2*3 			V3@S8414
+0250 PF RE
+0260 PG
+0270 M13 *S269672526292 V2@Q323 		V3@I$Q.5I$5
+0280 M14 *S7252629272625124 V2@I20Q1I0$23 	V3@Q.5I52345
+0290 M15 *S3-11-1624972586249 V2@I643120$1 	V3@I89AQ.5I35
+0300 M16 *S725862495123I43   V2@Q2I$123*S2-11-2 V3@I5035458F
+0310 M17 *Q2 		V2@Q1 			V3@SC854
+0320 /VAR. II
+0330 PH
+0340 M18 *Q666 		V2*I243542 		V3@S315161815131
+0350 M19 *Q666I65$ 	V2*I354231Q0 		V3@56181513161815374
+0360 M20 *Q6666 	V2*Q1I243124 		V3@S812%131516486A8C5
+0370 M21 *Q666I65# 	V2*I312431Q0 		V3@S6486A8C56486574B
+0380 M22 *Q6 		V2*Q1 			V3@S8412%
+0390 PI
+0400 M23 *Q999 		V2*I465764 		V3@S3*21202@2+23+25+2
+0410 M24 *Q9I$4$$$2 	V2*I57697654 		V3@SO+22+23+25+22+23+24+151
+0420 M25 *Q3676 	V2*Q1I$2$2$2 		V3@S8192AT56I5S9T56I5SAT56I5
+0430 M26 *Q76S1543I4S32 V2*I$2$2$$21 		V3@S9T56I5SAT56I5SB659I8F
+0440 M27 *Q2 		V2@Q1 			V3@SCA85
+0450 /VAR. III
+0460 PJ
+0470 M28 *S:456234123-165456234 V2@Q515 	V3@I$3$6$3
+0480 M29 *S:123-16545#6789345678786365 V2@Q1C 	V3@I$6$55654
+0490 M30 *S:631-165% 	V2@Q8 			V3@I$6
+0500 PK RJ
+0510 PL
+0520 M31 *S:456298789567456298 V2@Q52+2 	V3@I$3$0$3
+0530 M32 *S:7895676789AB567675454343 V2@Q2*2I2120 V3@I$0$34452
+0540 M33 *S:132123-101234012345123456 V2@Q1$98 	V3@I$235$4$3
+0550 M34 *S:23456789A543987654342-121 V2@Q78A 	V3@I$2$65398
+0560 M36 *S:2-1-3I-5 	V2@QC
+0570 /VAR. IV
+0580 PM
+0590 M37 *Q.6I6Q6 	V2*I243124 		V3@S:321543654876A98C85</pre></a>
+<a class='menuItem' href='' onclick='return Load(this)'>ALLEGRO<pre style='display: none'>
+0010 /ALLEGRO
+0020 /W.F. BACH
+0021 / (P) (C) 1977 SOFTWARE TECHNOLOGY CORP.
+0030 <3
+0040 K3# NI=50
+0050 PA
+0060 M1 *S98
+0070 M2 *S78675765 V2@I9$7
+0080 M3 *S4564I2S34 V2@Q.5I6
+0090 M4 *I5S67I87 V2@I79A9 V3*Q$I65
+0100 M5 *Q7I6S98 V2@QCIC V3*Q5I4
+0110 M6 *S78675765 V2@I9$7
+0120 M7 *S4564I2S34 V2@Q.5I6
+0130 M8 *I55S6567 V2@I795C
+0140 M9 *Q6I5 V2@Q.9
+0150 PB RA
+0160 PC
+0170 M10 *S67
+0180 M11 *I8,8,7,7, V2@S$5352579 V3*I6,6,6,6,
+0190 M12 *Q7I6S78 V2@S56#56I5 V3*Q5I4S56
+0200 M13 *I9,9,8,8, V2@S$+2023135 V3*I7,7,6,6,
+0210 M14 *Q8I7S98 V2@S2323I2 V3*Q6I5
+0220 M15 *S78675765 V2@I9$7
+0230 M16 *S456789AB V2@Q.5I6
+0240 M17 *IC,A,9,4, V2@I7,6,5,C, V3*I$8,7,1,
+0250 M18 *Q.5 V2@Q.9 V3*Q.0
+0260 PD RC
+</pre></a>
+<a class='menuItem' href='' onclick='return Load(this)'>BELLS<pre style='display: none'>
+0010 / CAROL OF THE BELLS
+0020 / FINK
+0030 /
+0035 / ENTERED PAUL SCHAPER
+0040 /
+0050 K2& NS=88
+0055 PA M
+0060 Q6I56Q46I56Q46I56Q46I56Q4
+0065 PB M
+0070 M Q6I56Q46I56Q46I56Q46I56Q4 V2H4Q$H.321
+0080 M Q6I56Q46I56Q46I56Q46I56Q4 V2H4Q$H.321 V3210-3
+0090 M Q6I56Q46I56Q46I56Q46I56Q4 V2H.0121 V3@5303*
+0100 M Q8I78Q68I78Q68I78Q68I78Q6 V2H.12%Q32&1I43Q21
+0105 V3Q6I56Q46I56Q46I56Q46I56Q4
+0110 M QB'IB'BA9Q8'I8'876 V2Q1I2'210H.1 V3@Q1I21Q31I21Q3*
+0120 M Q7'I7'787Q4'I4'4'Q4 V22'I2'232Q1'I1'1'Q1'
+0125 V3@Q1I21Q31I21Q3*
+0130 M I$2%3#45678Q76 V2H.1@6 V3Q1I21Q31I21Q3
+0140 M *I12%3#45678Q76 V2H.@6'H6Q5% V3Q1I21Q31I21Q3
+0150 M *Q6I56Q46I56Q46I56Q46I56Q4 V2H.1032 V3@4567
+0155 PC
+0160 M *Q6I56Q46I56Q46I56Q46I56Q4 V2H.1'1'1 V3@A'A'A*
+0165 PD RB PE
+0170 M 1'1'1'1' V2@Q1I21Q31I21Q31I21Q31I21Q3 V3H.A'A'A'A
+0175 *
+0180 M *H$H.8Q.78$W44 V2H$H.6Q.56$W$-A
+</pre></a>
+<a class='menuItem' href='' onclick='return Load(this)'>BOURREE<pre style='display: none'>
+0010 /BOURREE
+0020 /G.F. HANDEL
+0021 / (P) (C) 1977 SOFTWARE TECHNOLOGY CORP.
+0030 <6
+0040 K1# NS=70
+0050 PA
+0060 M8 *Q8, V2*Q6, V3@Q3
+0070 M9 *Q8,6,I765,4, V2*Q5,4,3-1 V3@Q4365
+0080 M10 *Q9HBIA9 V2*Q498I4 V3@Q7010
+0090 M11 *Q8I7,6,567,5, V2*Q3$43 V3@Q+130+1
+0100 M12 *Q6H4Q5 V2*Q4H1Q3 V3@Q+13A6
+0110 M13 *I67#8,6,789,7, V2*Q4542 V3@Q3452
+0120 M14 *I89A,8,9AB,9, V2*Q5"5"5"7# V3@Q4+10#2
+0130 M15 *IABQC$7# V2*H8Q52 V3@Q+1429
+0140 M16 *H.8 V2*H.3 V3@Q6I+10#Q+1
+0150 PB RA
+0160 PC
+0170 M17 *QC V2*QA V3@Q6
+0180 M18 *QCAIBA98 V2*QA8I8 V3@Q+12+10
+0190 M19 *QBHDQ9 V2*Q1I-10Q12 V3@Q1I32Q10
+0200 M20 *Q8#9AIBC V2*Q3498 V3@Q1521
+0210 M21 *QBH9Q8 V2*Q6H4Q3 V3@Q5"5+21
+0220 M22 *Q8I76Q7"7 V2*Q2"H2"Q2 V3@Q53#29
+0230 M23 *Q7I65Q68 V2*Q1"H1Q4 V3@Q6432
+0240 M24 *I9AB9ABCA V2*H45 V3@Q02+10
+0250 M25 *IBCDBCDEC V2*H8"8 V3@Q1346
+0260 M26 *QDICBABCA V2*Q8I76Q58 V3@Q31+10
+0270 M27 *IBCDBQC7 V2*Q8"880 V3@Q1342
+0280 M28 *Q6I543453 V2*Q1 V3@Q31+10
+0290 M29 *I45645675 V2*I1$$$1 V3@Q1346
+0300 M30 *I67Q86I54 V2*I1$Q$10 V3@Q386D
+0310 M31 *H.4 V2*H.-1 V3@H.A
+0320 PD RC</pre></a>
+<a class='menuItem' href='' onclick='return Load(this)'>ENTERTAINER<pre style='display: none'>
+0010 /"ENTERTAINER" BY SCOTT JOPLIN
+0020 /PROGRAMMED BY M.T.ROBINSON
+0050 NS=85
+0055 >1
+0060 /HELP FOR PROGRAMMING PROVIDED BY KEVIN SCOTT
+0070 PA
+0080 M1 V1*IBB#C
+0090 M2 V1*IECECCA#CA V2@Q.7I9#Q.9IA& V3*Q.9&I7Q.7I5
+0100 M3 V1*IA9&A997Q9 V2@Q.A&ICHC V3*Q.5I3#H3
+0110 M4 V1*I8A#B4AB4A V2@Q.3I4Q.4I5 V3@Q.AIBQ.BIC
+0120 M5 V1*IB4A#BQBI11# V2@Q.5I6Q6 V3@Q.CIDQD
+0130 PB
+0140 M6 V1*I2Q7I2Q7I27 V2@Q$0$0 V3@Q7$A
+0150 M7 V1*H7I7788# V2@I$22&3Q30 V3@QB$C
+0160 M8 V1*I978996Q8 V2@Q$+2$+1 V3@QA$A
+0170 M9 V1*H.7I1%1# V2@Q0123 V3@Q789A
+0180 M10 V1*I2Q7I2Q7I27 V2@Q$0$0 V3@Q7$A$
+0190 M11 V1*H.7I54 V2@I$22&3Q30 V3@HBQCC&
+0200 M12 V1*I3#5799875 V2@Q$0$0
+0210 M13 V1*Q678I11# V2@Q10+1$ V3@QA98$
+0220 M14 V1*I2Q7I2Q7I27 V2@Q$0$0 V3@Q7$A$
+0230 M15 V1*H7I7788# V2@I$22&3H3 V3@QB$C$
+0240 M16 V1*I978996Q8 V2@Q$+2$+1 V3@QA$A$
+0250 M17 V1*H.7I78 V2@Q$0$0 V3@Q789A
+0260 M18 V1*I97899787 V2@H01& V3@H78&
+0270 M19 V1*I97899787 V2@H22& V3@99&
+0280 M20 V1*I978996Q8 V2@Q.3I3Q31 V3@Q.AIAQAA
+0290 PC
+0300 M21 V1*H7I$233# V2@H0$ V3@Q7AE$
+0310 M22 V1*Q4I544233# V2@Q$0$0 V3@QE$A$
+0320 M23 V1*Q4I544974 V2@Q$0$0 V3@QE$A$
+0330 M24 V1*I56789878 V2@Q$0$0 V3@QB$B$
+0340 M25 V1*H4I$233# V2@Q$0$0 V3@Q789A
+0350 M26 V1*Q4I544233# V2@Q$0$0 V3@Q7$A$
+0360 M27 V1*Q4I544455# V2@Q$0$0 V3@QE$CC&
+0370 M28 V1*I6666653#1 V2@Q$1$0 V3@QD$D$
+0380 M29 V1*H4I$233# V2@I$761H1 V3@QABCD
+0390 M30 V1*Q4I544233# V2@Q$0$0 V3@QE$A$
+0400 M31 V1*Q4I544974 V2@Q$0$0 V3@QE$A$
+0410 M32 V1*I56789878 V2@Q$0$0 V3@QB$B$
+0420 M33 V1*H7I743#4 V2@Q$0$0 V3@QE$EC
+0430 M34 V1*Q7I577575 V2@Q2I4#22424 V3@HBB#
+0440 M35 V1*I4567Q74 V2@I0123H3 V3@HAQAA
+0450 M36 V1*Q57I9Q.8 V2@Q00I1Q.1 V3@QD$A$
+0460 M37 V1*H.7I11# V2@I04#30Q0$ V3@Q7AE$
+0470 PD RB
+0480 PE
+0490 M38 V1*Q7$S88#IE$Q$ V2@Q0$0$ V3@Q7AIE$Q$
+</pre></a>
+<a class='menuItem' href='' onclick='return Load(this)'>GREENSLEEVES<pre style='display: none'>
+0010 / GREENSLEEVES
+0020 / ARRANGED BY PAUL SCHAPER
+0025 /
+0030 / ENTERED PAUL SCHAPER
+0035 /
+0040 PA
+0050 K1#
+0060 NQ = 47
+0070 M1 V1*I2 V2@1 V33
+0080 M2 V1*Q4I5I.6S7I6 V2Q2I1Q1I4 V3@Q1I4Q3I3
+0090 M3 V1*Q5I3I.1S2I3 V2Q3I1Q1I0 V3@Q6I2Q4I2
+0095 M4 V1*Q4I2I.2S1#I2 V2@Q1I1Q2I-2 V3Q5I3Q7I7
+0100 M5 V1*Q.3Q-1"I2 V2Q.1#@Q8"I1 V3Q.1Q$I3
+0110 M6 V1*Q4I5I.6S7I6 V2Q2I1Q1I4 V3@Q1I4Q3I3
+0120 M7 V1*Q5I3'I.1S2I3 V2Q3I1Q1I0 V3@Q6I2Q4I2
+0130 M8 V1*I.4S3I2I.1#S0#I1 V2@Q1I0Q1I1 V3Q5I2Q4I4
+0140 M9 V1*Q.2'2" V2@1'1" V33'3"
+0150 M10 V1*Q.8I.8S7I6 V2Q.3I.6S5I4 V3@Q.1Q3I3
+0160 M11 V1*Q5I3I.1S2I3 V2Q3I1'Q1I0 V3@Q6I2Q4I2
+0170 M12 V1*Q4I2I.2S1#I2 V2@Q1I1Q2I-2 V3Q5I3Q7I7
+0180 M13 V1*Q3I1#Q.-1" V2Q1#I@1Q.8" V3Q1I4Q.$
+0190 M14 V1*Q.8I.8S7I6 V2Q.3I.6S5I4 V3@Q.1Q3I3
+0200 M15 V1*Q5I3I.1S2I3 V2Q3I1'Q1I0 V3@Q6I2Q4I2
+0210 M16 V1*I.4S3I2I.1#S0#I1 V2@Q1I0Q1I1 V3Q5I2Q4I4
+0220 M17 V1*Q.2'Q2" V2@Q.1'Q1" V3Q.2'Q3"
+0230 PB
+0240 M18 V1T$
+0250 PC RA
+</pre></a>
+<a class='menuItem' href='' onclick='return Load(this)'>MOONLIGHT<pre style='display: none'>
+0010 / MOONLIGHT SONATA
+0015 / SONATA QUASI UNA FANTASIA
+0020 / L. VAN BEETHOVEN, OP.27 NO.2
+0025 /
+0030 / ENTERED PAUL SCHAPER
+0035 /
+0040 >1
+0050 K4#
+0060 NQ=80
+0070 PA
+0080 M1 S@30+230+230+230+2 V2H.7
+0090 M2 S30+230+230+230+2 V2H.8
+0100 M3 S*-202-202-21%3-213 V2@I.9'9Q.B
+0110 M3 S31#+330+230+1#41+1 V2Q.A'A'
+0115 PB
+0120 M5 S53030+230+230+2 V2H.7 V3HASA*I4T:4'S:4'
+0130 M6 S-313-313-313-313 V2H4S4'I4T:4'S:4' V3@H.8#
+0140 M7 S*-302-302-203-203 V2Q.45 V3@7B
+0150 M8 S31+231+221+121+1 V2Q.8'8 V3*4I.36
+0155 PC
+0160 M9 S@31$31+231+231+2 V2H.5' V3I.+2
+0170 M10 S3%1+231+231+231+2 V2H.5 V3*H$S$I4%T:4'S:4'
+0180 M11 S@3%1+3%31+331+331+3 V2H.6% V3*H4S4'I4T:4'S:4'
+0190 M12 S-3%0%2%-302-30#2-4#02 V2H4S4I.3# V3@7%8Q.9#
+0200 M13 S41+1%41+13%10510 V2Q.8I.CA% V3*Q.3I.4%2
+0210 M14 S@41+1%41+142#0420 V2Q.B'B V3*3'3
+0220 M15 S$1%3-113-11#3-113 V2I.-1Q.$I.6 V3@H.8
+0230 M16 S*-124%-124-124-124 V2H7%S7I.5# V3@853%5
+0240 M17 S*-11#3-113-113-113 V2H6S6'I.6 V3@H.8
+0250 M18 S*-124%-124-124-124 V2H7%S7I.5# V3@853%5
+0260 M19 S*-113-113-11%2#-112 V2Q.6'6' V3@8A#
+0270 M20 S*-104#-104-2%03-203 V2Q.65% V3@C#B
+0280 M21 S3%1+1%31+142+1#42+1 V2Q.88# V3*4%3
+0290 M22 S@74274274375#3 V2Q.0'I.0'0 V3Q.E'E'
+0300 M23 I.4HBSB V2S*$-20-203035035 V3H-ES-EI7T:7'S:7'
+0310 M24 S046046046046 V2H7S7'I7T:7'S:7' V3@H.5#
+0320 M25 S*035035-1#35035 V2Q.7I.6#7 V3@Q.4I.67
+0340 M26 S*134134134134 V2H8S8'I.8 V3@H8#S8'I.8
+0350 M27 S*247247235025# V2Q.9I.87 V3@Q.7I.BA%
+0360 M28 S*6#-1#1$-11$-11$-11 V2I.$45%3 V3@H.A
+0370 M29 S$1#+1$1+1$1+1$1+1 V2H.A' V3I.$324
+0380 M30 S*-524$24$24$24 V2I.$797 V3@H.A'
+0390 M31 S$53$53$53$53 V2H.A' V3*I.$020
+0400 M32 S@6241#2+11S*31536# V2H.-A'
+0410 M33 S-50-3204274974 V2H.-A'
+0420 M34 S04%25#4%7597B%9C# V2S-AH-A#I.-A#
+0430 M35 S36#5%86A8C%AD#CF V2H.-A
+0440 M36 SD#AC8A6#856351 V2H.-A
+0450 M37 S@+31#+12142$4$42 V2Q.$S$I6I.7 V3H.A'
+0460 M38 S$43234$42$42 V2Q.8#I.67 V3H.A'
+0470 M39 S$43234$42$42 V2Q.8#I.6%7 V3H.A'
+0480 M40 S$43234750750 V2Q.8# V3A9
+0490 M41 S620620631#641 V2Q.BA'
+0500 PD RB
+0510 PE
+0520 M46 S*-3-1$-124-124-124 V2I.2Q.$I6T:6'S:6' V3H.-5
+0530 M47 S*-135-135-135-135 V2H6S6'I6T:6'S:6' V3H.-6
+0540 M48 S-124-124-1#34024 V2Q.6I.6#7 V3@Q.5I.67
+0550 M49 S*134134247247 V2Q.89 V3-8#-7
+0560 M50 S1%35135-1#34-134 V2Q.8%6# V3@BA
+0570 M51 S*02402402#4024 V2H7S7'I.7 V3H.-7
+0580 M52 S035035035035 V2H8%S8I.6# V3@7424
+0590 M53 S*02#4024024024 V2H7S7'I.7 V3H.-7
+0600 M54 S035035035035 V2H8%S8I.6# V3-7-4-2-4
+0610 M55 S02#4024035035 V2Q.7'7 V3@7B
+0620 M56 S*-135-135-135-124 V2H6%S6'I.6' V3@H6S6I.5
+0630 M57 S*-224-213-313-302 V2I.5'54'4 V3@768#7
+0640 M58 S40+140+130+120+1 V2*Q.3I.45 V3@Q.9I.AB
+0650 M59 S30+230+241#+141+1 V2Q.A'A' V3*4'4
+0660 M60 S@53030+230+230+2 V2I.0 V3HASA'IAT:A'S:A'
+0670 M61 S*-313-313-313-313 V2@HASA'IAT:A'S:A'
+0680 M62 S*-320427497B97 V2@HASA'IAT:A'S:A'
+0690 M63 S*6#8563513@2234 V2HASA'IAT:A'S:A' V3H$S$I.1#
+0700 M64 S*-520427497B97 V2@HASA'IAT:A'S:A' V3S0
+0710 M65 S*6#8563513@2234 V2HASA'IAT:A'S:A' V3H$S$I.1#
+0720 M66 S530+203$53035 V2S0 V3Q.A7
+0730 M67 S$75357A7ACAC V2Q.A'
+0740 M68 Q.E'A' V2$5' V3$0'
+0750 M69 H.E V25 V30
+</pre></a>
+<a class='menuItem' href='' onclick='return Load(this)'>PRELUDE<pre style='display: none'>
+0010 /PRELUDE IN C MAJOR
+0020 /J.S. BACH
+0021 / (P) (C) 1977 SOFTWARE TECHNOLOGY CORP.
+0030 >1
+0040 K NI=90
+0050 PA
+0060 M1 *S$$479479$$479479 V2*S$I.2Q2S$I.2Q2 V3@Q0I.0S$Q0I.0
+0070 M2 *S$$58A58A$$58A58A V2*S$I.1Q1S$I.1Q1 V3@Q0I.0S$Q0I.0
+0080 M3 *S$$48A48A$$48A48A V2*S$I.1Q1S$I.1Q1 V3@Q1I.1S$Q1I.1
+0090 M4 *S$$479479$$479479 V2*S$I.2Q2S$I.2Q2 V3@Q0I.0S$Q0I.0
+0100 M5 *S$$59C59C$$59C59C V2*S$I.2Q2S$I.2Q2 V3@Q0I.0S$Q0I.0
+0110 M6 *S$$3#58358$$358358 V2*S$I.1Q1S$I.1Q1 V3@Q0I.0S$Q0I.0
+0120 M7 *S$$48B48B$$48B48B V2*S$I.1Q1S$I.1Q1 V3@Q1I.1S$Q1I.1
+0130 M8 *S$$247247$$247247 V2@S$I.0Q0S$I.0Q0 V3@Q1I.1S$Q1I.1
+0140 M9 *S$$247247$$247247 V2@S$I.0Q0S$I.0Q0 V3@Q2I.2S$Q2I.2
+0150 M10 *S$$13#7137$$137137 V2@S$I.2Q2S$I.2Q2 V3@Q6I.6S$Q6I.6
+0160 M11 *S$$146146$$146146 V2@S$I.1Q1S$I.1Q1 V3@Q3I.3S$Q3I.3
+0170 M12 *S$$247#247$$247247 V2@S$I.1&Q1S$I.1Q1 V3@Q3I.3S$Q3I.3
+0180 M13 *S$$158158$$158158 V2@S$I.2Q2S$I.2Q2 V3@Q4I.4S$Q4I.4
+0190 M14 *S$$136136$$136136 V2@S$I.2&Q2S$I.2Q2 V3@Q4I.4S$Q4I.4
+0200 M15 *S$$047047$$047047 V2@S$I.3Q3S$I.3Q3 V3@Q5I.5S$Q5I.5
+0210 M16 *S$$-203-203$$-203-203 V2@S$I.4Q4S$I.4Q4
+0220  V3@Q5I.5S$Q5I.5
+0230 M17 *S$$-203-203$$-203-203 V2@S$I.4Q4S$I.4Q4
+0240  V3@Q6I.6S$Q6I.6
+0250 M18 @S$$31+331+3$$31+331+3 V2@S$I.6Q6S$I.6Q6
+0260  V3@QAI.AS$QAI.A
+0270 M19 *S$$-302-302$$-302-302 V2@S$I.5Q5S$I.5Q5
+0280  V3@Q7I.7S$Q7I.7
+0290 M20 *S$$-1&02-102$$-102-102 V2@S$I.3Q3S$I.3Q3
+0300  V3@Q7I.7S$Q7I.7
+0310 M21 *S$$-202-202$$-202-202 V2@S$I.4Q4S$I.4Q4
+0320  V3@QBI.BS$QBI.B
+0330 M22 *S$$-202&-202$$-202-202 V2@S$I.7Q7S$I.7Q7
+0340  V3@QB#I.BS$QBI.B
+0350 M23 *S$$-101-101$$-101-101 V2@S$I.4Q4S$I.4Q4
+0360  V3@Q9&I.9S$Q9I.9
+0370 M24 @S$$31+131+1$$31+131+1 V2@S$I.4Q4S$I.4Q4
+0380  V3@QAI.AS$QAI.A
+0390 M25 *S$$-302-302$$-302-302 V2@S$I.5Q5S$I.5Q5
+0400  V3@QAI.AS$QAI.A
+0410 M26 *S$$-303-303$$-303-303 V2@S$I.6Q6S$I.6Q6
+0420  V3@QAI.AS$QAI.A
+0430 M27 @S$$31+331+3$$31+331+3 V2@S$I.6Q6S$I.6Q6
+0440  V3@QAI.AS$QAI.A
+0450 M28 *S$$-203#-203$$-203-203 V2@S$I.5&Q5S$I.5Q5
+0460  V3@QAI.AS$QAI.A
+0470 M29 *S$$-304-304$$-304-304 V2@S$I.5Q5S$I.5Q5
+0480  V3@QAI.AS$QAI.A
+0490 M30 *S$$-303-303$$-303-303 V2@S$I.6Q6S$I.6Q6
+0500  V3@QAI.AS$QAI.A
+0510 M31 @S$$31+331+3$$31+331+3 V2@S$I.6Q6S$I.6Q6
+0520  V3@QAI.AS$QAI.A
+0530 M32 @S$$31&+231+2$$31+231+2 V2@S$I.7Q7S$I.7Q7
+0540  V3@QEI.ES$QEI.E
+0550 M33 @S$$420+30202424646 V2@S$I.7Q7H7 V3@HEQEI.E
+0560 M34 *S$$468A8686461321 V2@S$I.8Q8H8 V3@HEQEI.E
+0570 M35 *S.$T4H.7 V2*T$-7S2H.2 V3@IEH.E
+</pre></a>
+<a class='menuItem' href='' onclick='return Load(this)'>SARABANDE<pre style='display: none'>
+0010 / SARABANDE
+0020 / BY JOHANN JAKOB DE NEUFVILLE
+0030 / FROM BACH'S "DAS KLEINE KLAVIERBUCH"
+0031 / (P) (C) 1977 SOFTWARE TECHNOLOGY CORP.
+0040 /
+0050 <4
+0060 K2&
+0070 NI=80
+0080 PA
+0090 M1 *T10S1Q1I2Q1 V2@H1Q2 V3@H3Q4#
+0100 M2 *T10S1Q1I2Q1 V2@H1Q2 V3@H3Q4%
+0110 M3 *T43S4Q4I6X6565S5I4 V2@H1I01 V3@H5Q7
+0120 M4 *T43#43I3H3 V2@H.2 V3@Q.6I567
+0130 M5 *X14T6S8Q8I4"Q4 V2@H.3 V3@H.8
+0140 M6 *T78S9Q9I4"Q4 V2@H3I32 V3@H.7
+0150 M7 *Q.1I4X43#43I.3 V2@H1Q2 V3@H.6
+0160 M8 *H.4 V2*I$1H-1 V3@T34#S3Q3I6QA
+0170 PB RA
+0180 PC
+0190 M9 *T87I.8QBXBABASAI9 V2@H1Q0 V3@H3Q2
+0200 M10 *Q8I98X8787S7I6 V2@H.1 V3@H.8
+0210 M11 *T89I.AI98X8787S7I6 V2@H0Q+1 V3@H2Q1
+0220 M12 *TA9I.AI98X8787S7I6 V2@H2Q3 V3@H4
+0230 M13 *T9AI.BIA9X9898S8I7 V2@Q1 V3@Q5
+0240 M14 *TA9I.AI987S86 V2@Q1 V3@Q6
+0250 M15 *T65S6Q6I76X6565S5 V2@H+1Q0 V3@H.4
+0260 M16 *S13Q6Q.6 V2@Q.1 V3@Q.8I432&
+0270 M17 *T87S8Q8I4"Q4 V2@H3 V3@H8%
+0280 M18 *T78S9Q9I4"Q4 V2@H3 V3@H7
+0290 M19 *T87S8Q8I4"Q4 V2@H1% V3@H3
+0300 M20 *T98S9Q9I4"Q4 V2@H0 V3@H7
+0310 M21 *T5&4S5Q5"I5Q4 V2*H2Q1 V3@H0Q1
+0320 M22 *T76S7Q7"I7Q6 V2@H0Q+1 V3@H2%Q3
+0330 M23 *T5&4S5Q5"I5Q4 V2@H+2Q+1 V3@H0Q1
+0340 M24 *Q7S7T89S87Q6 V2@H0Q+1 V3@H2%Q3
+0350 M25 *X65&65S5Q5I4Q9 V2*H.2 V3@H.0
+0360 M26 *X43#43S3Q3I8Q4" V2@H+1Q+1 V3@H0Q1
+0370 M27 *T43#S4Q4I5X43#43I.3 V2@H1Q2 V3@H.6
+0380 PD
+0390 M28A *H.4 V2*I$1H-1 V3@T34#S3Q3I6QA
+0400 PE RC
+0410 PF =B8
+0420 M28B *W4 V2*I$1H.-1 V3@T34#S3Q3I6HA
+</pre></a>
+<a class='menuItem' href='' onclick='return Load(this)'>SOLFEGGIETTO<pre style='display: none'>
+0010 / SOLFEGGIETTO
+0015 / BY KARL PHILIPP EMANUEL BACH 1714-1788
+0020 / TRANSCRIBED FOR HARP BY MARIE MILLER
+0025 / OUR THANKS TO LESLIE MCMICHAEL
+0030 /
+0035 / ENTERED PAUL SCHAPER
+0040 /
+0060 NS=88 K3&
+0065 PA
+0070 M1 @S57530+2+101%31*14321
+0080 M2 20247987876%5%4321
+0090 M3 202479876%468BA98
+0100 M4 979BE9FEFED%C%BA98
+0110 M5 97420EB9C-4-203579
+0120 M6 8631-1DA8B@531*2468
+0130 M7 75%4#57545974%59745
+0140 M8 873#5%C%735A#7157531
+0150 M9 6@A86312%34#642+1012
+0160 M10 131*1465%4543#2%10@12%
+0170 M11 131*1465%43#1358765
+0180 M12 6468BDC%BCBA#9%8765%
+0190 M13 -3468B864-4B86%468B V2@A$Q.$SB
+0200 M14 *74B474B46%4A464A4 V22I.$S2I.$S1I.$S1
+0210 M15 079BEB97-1EB9%79BE V2@7$Q.$S8
+0220 M16 *A7E7A7E79%7D797D7 V25I.$S5I.$S4I.$S4
+0230 M17 @0B9742345%7530123
+0240 M18 2420*3543432%10@123
+0250 M19 2420*35432%0247654
+0260 M20 5357ACBABA9%87654
+0270 M21 5A7537530530-230-2
+0280 M22 H-7#SCA9%ABA9A
+0290 M23 H-7S532%34323
+0300 M24 H-7&SFABCBA9&8
+0310 M25 I9SBEDCBAQ9T.89878 V2Q@7437
+0320 M26 *S74B474B46%4A464A4 V22I.$S2I.$S1I.$S1
+0330 M27 649%464945%9&E959E9 V20I.$S0I.$S3I.$S3
+0340 M28 5383538347#D747D7 V2-1I.$S-1I.$S2I.$S2
+0345 M28B 3#27%2327297E797E7 V2-2I.$S-2I.$S3I.$S3
+0350 M29 479BEB97B975A86%3 V22$Q.$Q$@3 V3S0
+0360 M31 +27530+2+101%31*14321
+0370 M32 20247987876%5%4321
+0380 M33 202479876%468BA98
+0390 M34 96#9BD#9FE&'D#987&6#210&
+0400 M35 Q-1#
+</pre></a>
+<a class='menuItem' href='' onclick='return Load(this)'>WIDFL<pre style='display: none'>
+1000 /WHAT I DID FOR LOVE - PROM "A CHORUS LINE"
+1010 NS=DF
+1020 PA
+1030 M1 *I94949494 	V2*18$8$7$7$
+1040 M2 *H$I2'S2I.5S24 	V2@H24 		V3@WA
+1050 M3 *W4 		V2*I$-31-30-30-3 V3@Q.7'17'Q.7'17'
+1060 M4 *Q4I$25432 	V2*I1-31-3H0# 	V3@Q.9'19'Q.9'19'
+1070 M5 *I31H.1 	V2*I$-20-2$-4-2-4 V3@Q.6'I6Q.719
+1080 M6 *Q1$I5ES4'I.413 V2*I$-2&0-2$Q-210 V3@Q.B'IB'Q.B19&
+1090 M7 *H24 		V2*I$-30-3$-11-1V3@H7Q.8IA
+1100 M8 *W7 		V2H3#S023579A#C V3@HD$
+1110 M9 *Q7$I2'25S21
+1120 M10 *I1$123Q5&I1 	V2*Q$I-2&Q$-21$ V3@H8'Q.8IC&
+1130 M11 *I1$1237Q7 	V2*Q$I-2 	V3@HD'O.D'1D
+1140 M12 *W6 		V2*Q1'1'1'1' 	V3@Q.A'IAQ.BSCD
+1150 M13 *I6TBA86Q4I2S21.5I2 V2*Q1 V3@WA
+1160 M14 *W4 		V2*I2-32-30-30-3 V3@Q.7'17'Q.7'17
+1170 M15 *Q4I$25432 	V2*I2-31-3HO# 	V3@Q.9'19'Q.9'19
+1180 M16 *I31H.1 	V2*I$-20-2$-4-2-4 V3@Q.6'I6Q.7%19
+1190 M17 *Q1$I5&S4'1.413 V2*I$-2&0-2$Q-210 V3@Q.B'1B'Q.B19&
+1200 M18 *H24 		V2*I$-30-3$-11-1 V3@H7Q.8IA
+1210 M19 *W7 		V2*H3#S023579A#C V3@HD$
+1220 M20 *QE$I2'25S21
+1230 M21 *I1$123Q5&I1 	V2*Q$I-2&Q$I-2 	V3@H8'Q.BIC&
+1240 M22 *I1$I1237Q7 	V2*Q$I-2&Q$I5&Q5 V3@HD'Q.D'lD
+1250 M23 *W6 		V2*Q1'1'1'1' 	V3@Q.A'IAQ.B'IB
+1260 M24 *H6 		V2*Q-1'-1 	V3@QCD
+1270 PB
+1280 M25 *W7 		V2*QO'0'0'0' 	V3@Q.9'19Q.A'IA
+1290 M26 *Q7$I6786 	V2*QQ254# 	V3@Q.IBQC'C
+1300 M27 *W7 		V2*Q2'2'2'2' 	V3@Q.9'I9Q.A'IA
+1310 M28 *Q7$I5675 	V2*Q2'2'21# 	V3@HB#8
+1320 M29 *W6 		V2*Q3#'32'2 	V3@Q.C'IC'Q.C'IC
+1330 M30 *Q6$I456&4 	V2*Q1*1H0# 	V3@Q.9'19'Q.9'19
+1340 M31 *H5&4 		V2*Q0%'0'0'0 	V3@Q.D'ID'Q.D'ID
+1350 M32 *I$TBA86Q412'S2I.5S24 		V3@WA
+1360 M33 *W4 		V2*I$-31-30-30-3 V3@Q.7'17'Q.7'17
+1370 M34 *Q4I$25432 	V2*I1-31-3H0# 	V3@Q.9'I9'Q.9'19
+1380 M35 *I31H.1 	V2*I$-20-24-4-2-4 V3@Q.6'I6Q.7%19
+1390 M36 *Q1$I5&S4'I.4S32 V2*I$-2&0-2$-21.-2S0 V3@Q.B'1B'Q.B19&
+1400 M37 *H24 		V2*I0-30-3$-11-1 V3@H78
+1410 M38 *W7 		V2*Q0'0'0'0 	V3@Q.9'19Q.A'1A
+1420 M39 *H7Q$I9S87 	V2*Q543#1.$S5 	V3@QB#CD
+1430 M40 *Q719S87Q7I9S87 V2*Q5*I.5S4Q4'I.4S3% V3@QB'BC'C
+1440 M41 *H78 		V2*Q3%'3'3'3 	V3@Q.D'1DQ.A'1A
+1450 M42 *W7 		V2*Q2'20'0 	V3@Q.7'17Q.8&'I8
+1460 M43 *Q3I123Q.6 	V2*H0I0 	V3@H9&I9
+1470 M44 *H7 		V2*Q2'20'0 	V3@Q.7'l7Q.8&'18
+1480 M45 *Q3I123Q.6 	V2*H01D 	V3@H9&I9
+1490 M46 *W7 				V3@I$503*2042
+1500 M47 *W9 		V2*T$W4 	V3*T$$W4</pre></a>
+<span class="txt">mod</span>
+<a class='menuItem' href='' onclick='return Load(this)'>DDU<pre style='display: none'>
+0001 /////////////////////////////////////////////
+0002 /BLACK THUNDER - DEEP DOWN UNDER (COMPLETED)/
+0003 /PORTED FROM "DDU.S3M" SCREAM TRACKER MODULE/
+0004 /BY ALIKBEROV 2010.04.27                    /
+0005 /VISIT ME AT: http://softrash.googlecode.com/
+0006 /////////////////////////////////////////////
+0008 K2#    /PATTERN SEQ:  0  1  2  3  2  4  5  6  5  7  8  9  8  10 11
+0009 NS=A0  /PARAGRAPHS:   -  -  C  D  Cs E  F  G  Fv H  I  J  Iy K  L
+0100 PA M10 /PATTERN #0 #1
+0101 V1*T000040000070005#00000500030004000
+0104 V4@T4$$$$$$$$$$$$$$$4$$$$$$$$$$$$$$$
+0110 M11
+0111 V1*T1#1#1#1#41#1#1#1#1#71#1#1#5#1#1#1#1#1#51#1#1#31#1#1#41#1#1#
+0114 V4@T4$$$$$$$$$$$$$$$4$$$$$$$4$$$$$$$
+0120 M12
+0121 V1*T33337333335#3338#33333733333335#333
+0124 V4@T4$$$$$$$$$$$$$$$4$$$$$$$$$$$$$$$
+0130 M13
+0131 V1*T-3#-3#-3#-3#1#-3#-3#-3#-3#-3#1-3#-3#-3#0-3#-2#-2#-2#-2#3-2#-2#-2#-2#-2#1#-2#-2#-2#1-2#
+0132 V2*T$$$$$$$$$$$$$$$$$$$$$$$$A$$$$$$$
+0134 V4@T4$$$$$$$$$$$$$$$4$$$4$$$4$$$2$4$
+0200 PC M20 /PATTERN #2 CORR
+0201 V1*T000040000070005#0
+0202 V2*T8$$$$$C$$$$$$$$$
+0203 V3*T:0#24#0#24#0#24#0#24#0#1#3#0#1#3#0#1#3#0#1#3#0#1#3#0#1#3#0#24#0#24#0#24#0#24#
+0204 V4@T4$$$$$4$2$$$4$$$
+0210 M21
+0211 V1*T0000500030004000
+0212 V2*T$$$$B$A$9$F$E$$$
+0213 V3*T:0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#
+0214 V4@T$$$$4$$$2$$$4$$$
+0220 M22
+0221 V1*T1#1#1#1#41#1#1#1#1#71#1#1#5#1#
+0222 V2*TE$$$$$C$$$$$B$$$
+0223 V3*T:-124#-124#-124#-124T$$:-11#3#-11#3#-11#3#-11#3#-11#3#-11#3#-124#-124#-124#-124#
+0224 V4@T4$$$$$4$2$$$4$$$
+0230 M23
+0231 V1*T1#1#1#1#51#1#1#31#1#1#41#1#1#
+0232 V2*T$$$$C4$$$$$$B$A$
+0233 V3*T:-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#
+0234 V4@T$$$$$$4$2$4$2$2$
+0300 PD M30 /PATTERN #3 CORR
+0301 V1*T33337333335#3338#3
+0302 V2*TB$$$$$8$$$$$$$$$
+0303 V3*T:0#3#50#3#50#3#50#3#5T$$:0#24#0#24#0#24#0#24#0#24#0#24#0#3#50#3#50#3#50#3#5
+0304 V4@T4$$$$$4$2$$$4$$$
+0310 M31
+0311 V1*T3333733333335#333
+0312 V2*T$$$$$$$$9$$$$$$$
+0313 V3*T:0#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#5
+0314 V4@T$$$$4$$$2$$$4$$$
+0320 M32
+0321 V1*T-2#-2#-2#-2#1#-2#-2#-2#-2#-2#1-2#-2#-2#0-2#
+0322 V2*TA$$$$$$$$$$$$$$$
+0323 V3*T:-20#2-20#2-20#2-20#2T$$:-20#1#-20#1#-20#1#-20#1#-20#1#-20#1#-20#2-20#2-20#2-20#2
+0324 V4@T4$$$$$4$2$$$4$$$
+0330 M33
+0331 V1*T-1#-1#-1#-1#3-1#-1#-1#-1#-1#1#-1#-1#-1#1-1#
+0332 V2*TB$$$$$$$3$2$7$5$
+0333 V3*T:-11#3#-11#3#-11#3#-11#3#T$$:-10#2-10#2-10#2-10#2-10#2-10#2-11#3#-11#3#-11#3#-11#3#
+0334 V4@T$$$$$$4$2$4$2$2$
+0399 PS RC
+0400 PE M40
+0401 V1*T33337333335#3338#3
+0402 V2*TB$$$$$8$$$$$$$$$
+0403 V3*T:0#3#50#3#50#3#50#3#5T$$:0#24#0#24#0#24#0#24#0#24#0#24#0#3#50#3#50#3#50#3#5
+0404 V4@T4$$$$$4$2$$$4$$$
+0410 M41
+0411 V1*T3333733333335#333
+0412 V2*T$$9ABCEFG$$$$$$$
+0413 V3*T:0#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#5
+0414 V4@T$$$$4$$$2$$$4$$$
+0420 M42
+0421 V1*T-3#-3#-3#-3#1#-3#-3#-3#-3#-3#1-3#-3#-3#0-3#
+0422 V2*TG$F$E$D$E$$$$$$$
+0423 V3*T:-20#2-20#2-20#2-20#2T$$:-20#1#-20#1#-20#1#-20#1#-20#1#-20#1#-20#2-20#2-20#2-20#2
+0424 V4@T4$$$$$4$2$$$4$$$
+0430 M43
+0431 V1*T-2#-2#-2#-2#3-2#-2#-2#-2#-2#1#-2#-2#-2#1-2#
+0432 V2*TG#$$$$$$$3$2$7$5$
+0433 V3*T:-11#-11#-11#-11#T$$:-10#2-10#2-10#2-10#2-10#2-10#2-11#-11#-11#-11#
+0434 V4@T$$$$$$4$2$4$2$2$
+0500 PF M50
+0501 V1*T000040000070005#0
+0502 V2*T8$$$$$$$$$$$$$$$
+0504 V4@4$$$$$$$$$$$$$$$$
+0510 M51
+0511 V1*T0000500030004000
+0512 V2*T:AB#ET$$$$$$$$$$$$$$$
+0514 V4@T2$$$$$$$$$$$4$$$
+0520 M52
+0521 V1*T1#1#1#1#41#1#1#1#1#71#1#1#5#1#
+0522 V2*T8$$$$$$$$$$$$$$$
+0524 V4@T4$$$$$$$4$$$$$$$
+0530 M53
+0531 V1*T1#1#1#1#51#1#1#31#1#1#41#1#1#
+0532 V2*T:8#B#ET$$$$$$$$$$$$$$$
+0533 V4@T2$$$$$$$$$$$$$$$
+0600 PG M60
+0601 V1*T33337333335#3338#3
+0602 V2*T1$$$$$$$$$$$$$$$
+0604 V4@T4$$$$$$$$$$$$$$$
+0610 M61
+0611 V1*T3333733333335#333
+0612 V2*T:5ADT$$$$$$$$$$$$$$$
+0614 V4@T2$$$$$$$$$$$4$$$
+0620 M62
+0621 V1*T-3#-3#-3#-3#1#-3#-3#-3#-3#-3#1-3#-3#-3#0-3#
+0622 V2*T1$$$$$$$$$$$$$$$
+0624 V4@T4$$$$$$$4$$$$$$$
+0630 M63
+0631 V1*T-2#-2#-2#-2#3-2#-2#-2#-2#-2#1#-2#-2#-2#1-2#
+0632 V2*T:8#BC#T$$$$$$$$$$$$$$$
+0634 V4@T2$$$$$$$$$$$$$$$
+0699 PV RF
+0700 PH M70
+0701 V1*T33337333335#3338#3
+0702 V2*T1$$$$$$$$$$$$$$$
+0704 V4@T4$$$$$$$$$$$$$$$
+0710 M71
+0711 V1*T3333733333335#333
+0712 V2*T:AC#E#T$$$$$$$$$$$$$$
+0714 V4@T2$$$$$$$$$$$4$$$
+0720 M72
+0721 V1*T-3#-3#-3#-3#1#-3#-3#-3#-3#-3#1-3#-3#-3#0-3#
+0722 V2*T1$$$$$$$$$$$$$$$
+0724 V4@T4$$$$$$4$$$$$$$$
+0730 M73
+0731 V1*T-2#-2#-2#-2#3-2#-2#-2#-2#-2#1#-2#-2#-2#1-2#
+0732 V2*T:8#BCT$$$$$$$4#$4$A$8#$
+0733 V3*T:-11#3#-11#3#-11#3#-11#3#T$$:-10#2-10#2-10#2-10#2-10#2-10#2-11#3#-11#3#-11#3#-11#3#
+0734 V4@T2$$$4$2$4$$$2$4$
+0800 PI M80
+0801 V1*T000040000070005#0
+0802 V2*T3$$$$$A$$$$$8#$$$
+0803 V3*T:0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#
+0804 V4@T4$$$$$4$2$$$4$$$
+0810 M81
+0811 V1*T0000500030004000
+0812 V2*T$$$$7$$$7#0#$8#$A$
+0813 V3*T:0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#24#0#1#3#0#1#3#0#1#3#0#1#3#
+0814 V4@T4$$$4$$$2$$$4$4$
+0820 M82
+0821 V1*T1#1#1#1#41#1#1#1#1#71#1#1#5#1#
+0822 V2*T4#$$$$$A#####8#$$$
+0823 V3*T:-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#
+0824 V4@T4$$$$$4$2$$$4$$$
+0830 M83
+0831 V1*T1#1#1#1#51#1#1#31#1#1#41#1#1#
+0832 V2*T$$$$7$$$7$5#$8#$A$
+0833 V3*T:-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-124#-11#3#-11#3#-11#3#-11#3#
+0834 V4@T4$$$4$$$2$$$4$2$
+0900 PJ M90
+0901 V1*T33337333335#3338#3
+0902 V2*T3$$$$$A$$$$$8#$$$
+0903 V3*T:0#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#5
+0904 V4@T4$$$$$4$2$$$4$$$
+0910 M91
+0911 V1*T3333733333335#333
+0912 V2*T$$$$7$$$7$5#$8#$A$
+0913 V3*T:0#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#24#0#24#0#24#0#24#
+0914 V4@T4$$$4$$$2$$$4$4$
+0920 M92
+0921 V1*T-3#-3#-3#-3#1#-3#-3#-3#-3#-3#1-3#-3#-3#0-3#
+0922 V2*T3$$$$$A$$$$$8#$$$
+0923 V3*T:-20#2-20#2-20#2-20#2T$$:-20#1#-20#1#-20#1#-20#1#-20#1#-20#1#-20#2-20#2-20#2-20#2
+0924 V4@T4$$$$$4$2$$$4$$$
+0930 M93
+0931 V1*T-2#-2#-2#-2#3-2#-2#-2#-2#-2#1#-2#-2#-2#1-2#
+0933 V3*T:-11#3#-11#3#-11#3#-11#3#T$$:-10#2-10#2-10#2-10#2-10#2-10#2-11#3#-11#3#-11#3#-11#3#
+0934 V4@T4$$$4$$$2$$$4$2$
+0999 /PY RI   /SORRY: BUG
+1000 /PK M100
+1001 /V1*T33337333335#3338#3
+1002 /V2*T3$$$$$A$$$$$8#$$$
+1003 /V3*T:0#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#5
+1004 /V4@T4$$$$$4$2$$$4$$$
+1010 /M101
+1011 /V1*T3333733333335#333
+1012 /V2*T$$$$7$$$4#$5#$7$8#$
+1013 /V3*T:0#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#3#50#24#0#24#0#24#0#24#
+1014 /V4@T4$$$4$$$2$$$4$4$
+1020 /M102
+1021 /V1*T-3#-3#-3#-3#1#-3#-3#-3#-3#-3#1-3#-3#-3#0-3#
+1022 /V2*T3$$$$$A$$$$$B$$$
+1023 /V3*T:-201#-201#-201#-201#T$$:-201-201-201-201-201-201-201#-201#-201#-201#
+1024 /V4@T4$$$$$4$2$$$4$$$
+1030 /M103
+1031 /V1*T-1#-1#-1#-1#3-1#-1#-1#-1#-1#1#-1#-1#-1#1-1#
+1032 /V2*T$$$$B#$$$B#$B$A$8#$
+1033 /V3*T:-11#3#-11#3#-11#3#-11#3#T$$:-102-102-102-102-102-102-11#3#-11#3#-11#3#-11#3#
+1034 /V4@T$$$$$$2$4$4$2$2$
+1100 /PL M110
+1101 /V1*T0000700000C000A0000090005000700033337333330333533333933353337333
+1104 /V4@TE$$$$$$$$$$$$$$$4$$$$$$$$$$$$$$$4$$$$$$$$$$$$$$$4$$$$$$$$$$$$$$$
+</pre></a>
+<a class='menuItem' href='' onclick='return Load(this)'>MOONDAY<pre style='display: none'>
+0001 /////////////////////////////////////////////
+0002 /RANDOM VOICES - MONDAY (COMPLETED)         /
+0003 /PORTED FROM "MOONDAY.MOD" PROTRACKER MODULE/
+0004 /BY ALIKBEROV 2010.04.30                    /
+0005 /VISIT ME AT: http://softrash.googlecode.com/
+0006 /////////////////////////////////////////////
+0008 K9#
+0009 NS=20
+0100 PA M10 /PATTERN#1 ROWS 00-0F
+0101 V1*I:579579Q79I:579579Q79I:599599Q7I:57A57AQ7AI:57A57AQ7
+0102 V2*Q5$$$$$$$7$8$$$7$
+0103 V3*Q-2$$51#$-5$-4$4-41#$-4$
+0104 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0110 M11    /PATTERN#1 ROWS 10-1F
+0111 V1*I:468468Q68I:478478Q6I:4A84A8488488Q6I:469469Q69I:469469Q69I:469469Q6
+0112 V2*Q$$$$6$$$5$4$$$$$
+0113 V3*Q-3$$41#$-6$-5$2-51#$1$
+0114 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0120 M12    /PATTERN#1 ROWS 20-2F
+0121 V1*I:246246Q46I:246246Q46I:246246Q46I:246246Q46I:246246Q4
+0122 V2*Q6$$$$$$$$$2$4$5$
+0123 V3*Q2$$91#$1$2$921#$1$
+0124 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0130 M13    /PATTERN#1 ROWS 30-3F
+0131 V1*I:357356Q57I:357357Q5I:357357357357Q5I:468468Q68I:468468Q68I:468468Q6
+0132 V2*Q7$$6$$5$4$$2$$4$
+0133 V3*Q3$$A1#$3$4$B41#$-51#
+0134 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0150 M15    /PATTERN#0 ROWS 00-0F
+0151 V1*I:579579Q79I:579579Q79I:57A57AQ7AI:57A57AQ7AI:57A57AQ7
+0152 V2*Q5$$$$$$$7$8$$$7$
+0153 V3*Q-2$$51#$-5$-4$4-41#$-4$
+0154 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0160 M16    /PATTERN#0 ROWS 10-1F
+0161 V1*I:468468Q68I:478478Q6I:4A84A8488488Q6I:469469Q69I:469469Q69I:469469Q6
+0162 V2*Q$$$$6$$$5$4$$$$$
+0163 V3*Q-3$$41#$-6$-5$2-51#$1$
+0164 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0170 M17    /PATTERN#0 ROWS 20-2F
+0171 V1*I:246246Q46I:246246Q46I:246246Q5I:246246Q46I:246246Q4
+0172 V2*Q2$$$$$$$$$$$4$5$
+0173 V3*Q2$$91#$1$2$921#$1$
+0174 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0180 M18    /PATTERN#0 ROWS 30-3F
+0181 V1*I:357357Q57I:357357Q5I:357357357357Q5I:468468Q68I:468468Q681#6#
+0182 V2*Q9$$8$$7$6$$5$$4$
+0183 V3*Q3$$A1#$3$4$B41#$-51#
+0184 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0200 M20    /PATTERN#2 ROWS 00-1F
+0201 V1*Q5979C9755979C9753757A7533757A7C3
+0202 V2*Q5$$$$$$$$$$$$$$$$$$$7$5$7$$$8$9$
+0203 V3*Q-2$$51#$-5-3-2$5-21#$-3$-4$$31#$-43-4$3-41#$-5$
+0204 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0220 M22    /PATTERN#2 ROWS 20-3F
+0221 V1*Q04247420042474204868B8644868B864
+0222 V2*Q$$$$$$$$$$B$$$$$84$$$$$$$$2$4$6$
+0223 V3*Q0$$71#$070$701#$-6$-3$$41#$-34-3$4-31#$-31#
+0224 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0300 M30    /PATTERN#3 ROWS 00-1F
+0301 V1*Q5979C9755979C9753757A7533757A7C3
+0302 V2*Q5$$$$$$$$$$$$$$$$$$$7$5$7$$$8$9$
+0303 V3*Q-2$$51#$-5-3-2$5-21#$-3$-4$$31#$-43-4$3-41#$-5$
+0304 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0320 M32    /PATTERN#3 ROWS 20-3F
+0321 V1*Q042474200424742015358541241#92$1#1#
+0322 V2*Q$$$$$$$$$$B$$$$$8$$$$$$$$$9$$$B$
+0323 V3*Q0$$71#$070$701#$-6$1$$81#$18-5$2$1#$4$
+0324 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0400 M40    /PATTERN#4 ROWS 00-1F
+0401 V1*QC95C95C95C95C9-2$C$$$$$$$$$9$$$7$
+0402 V2*QC$$$$$$$$$$$$$$$$$$$95C9C95C95C9
+0403 V3*Q-2$5-21#$-25-2$5-21#$-25-2$5-21#$-25-2$5-21#$-25
+0404 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0420 M42    /PATTERN#4 ROWS 20-3F
+0421 V1*Q8$$$$$$$$$7$$$6$5$$$$$$$$$3$4$6$
+0422 V2*QC85C85C8C85C85C8C85$$$$$$$-5DDC#-5B
+0423 V3*Q-3$4-31#$-34-3$4-31#$-34-6$1-11#$-61-5$2-51#$-31#
+0424 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0500 PD M50 /PATTERN#5 ROWS 00-0F
+0501 V1*I:597597Q$I:597597Q$I:597597Q$I:597597597597Q$I:597597Q$I:597597597597Q$I:597597Q$
+0502 V2*Q5$$$$$$$$$$$$$$$
+0503 V3*Q-2$5-21#$54$4-33#1#-33#4
+0504 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0510 M51    /PATTERN#5 ROWS 10-1F
+0511 V1*I:597597Q$I:597597Q$I:597597Q$I:597597597597Q$I:597597Q$I:597597597597Q$I:597597Q$
+0512 V2*Q$$$$$$$$$$8$$$$$
+0513 V3*Q-2$5-21#$54$4-33#1#-33#4
+0514 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0520 M52    /PATTERN#5 ROWS 20-2F
+0521 V1*I:5A75A7Q$I:5A75A7Q$I:5A75A7Q$I:5A75A75A75A7Q$I:5A75A7Q$I:5A75A75A75A7Q$I:5A75A7Q$
+0522 V2*Q8$$$$$$$$$$$$$7$
+0523 V3*Q1$811#$87$7061#067
+0524 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0530 M53    /PATTERN#5 ROWS 30-3F
+0531 V1*I:5A75A7Q$I:5A75A7Q$I:5A75A7Q$I:5A75A7264#264#Q$I:264#264#Q$I:264#264#264#264Q$I:264#264$Q$
+0532 V2*Q8$$8$$8$8$$$9$$$
+0533 V3*Q1$811#$1-5$2-521#$12
+0534 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0599 PE RD
+0600 PF M60 /PATTERN#6 ROWS 00-1F
+0601 V1*Q5979C9755979C9753757A7533757A7C3
+0602 V2*Q9$$$$$$$$$8$$$$$7$$$$$$$$$6$$$52
+0603 V3*Q-2$$51#$-5-3-2$5-21#$-3$-4$$31#$-43-4$3-41#$-5$
+0604 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2
+0620 M62    /PATTERN#3 ROWS 20-3F
+0621 V1*Q042474200424742015358541241#92$1#1#
+0622 V2*Q4$$$$$3$$$$$2$$$8$$$$$7$$$$$6$$$
+0623 V3*Q0$$71#$070$701#$-6$-3$$41#$-34-3$4-31#$-31#
+0624 V4*QF-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2F-1-2-2
+</pre></a>
+<a class='menuItem' href='' onclick='return Load(this)'>RULLSTOL<pre style='display: none'>
+0001 /////////////////////////////////////////////
+0003 /MANIAC/X-PRESSION - RULLSTOL               /
+0004 /KEYGEN BACKGROUND FAST TRACKER MODULE 148.XM
+0005 /BY ALIKBEROV 2010.04.30                    /
+0006 /VISIT ME AT: http://softrash.googlecode.com/
+0007 /////////////////////////////////////////////
+0008 K0#
+0009 NS=28
+0100 PA M10 /PATTERN#1 ROWS 00-0F
+0101 V1*Q5C$C5C$C3A$A3A$A
+0103 V3*Q:57957957957957957957957957A57A57A57A57A57A579579
+0104 V4*QF22222222222222F
+0110 M11    /PATTERN#1 ROWS 10-1F
+0111 V1*Q4B$B4B$B29$929$9
+0113 V3*Q:46846846846846846846846846A46A46A46A46A46A468468
+0114 V4*QF22222222222222F
+0120 M12    /PATTERN#1 ROWS 20-2F
+0121 V1*Q5C$C5C$C3A$A3A$A
+0123 V3*Q:57957957957957957957957957A57A57A57A57A57A579579
+0124 V4*QF2F2F2F2F2F2F2F2
+0130 M13    /PATTERN#1 ROWS 30-3C
+0131 V1*Q4B$B4B$B4#B#$B#$
+0133 V3*Q:4684684684684684684684684#684#684#684#684#68
+0134 V4*QF2F2F2F2FF2F2
+0140 M14    /PATTERN#2 ROWS 00-05
+0141 V1*Q$EE$B#$
+0143 V3*Q:4#684#68469469469469
+0144 V4*Q2$F$F$
+0200 M20    /PATTERN#0 ROWS 00-0F
+0201 V1*Q5CEC5CEC3AEA3AEA
+0202 V2*Q9$95$5998$95$67B
+0203 V3*Q:57957957957957957957957957A57A57A57A57A57A579579
+0204 V4*QF2F2F2F2F2F2F2F2
+0210 M21    /PATTERN#0 ROWS 10-1F
+0211 V1*Q4BEB4BEB29E929E9
+0212 V2*Q$B8889BC$C9C8$7$
+0213 V3*Q:468468468468468468468468469469469469469469468468
+0214 V4*QF2F2F2F2F2F2F2F2
+0220 M22    /PATTERN#0 ROWS 20-2F
+0221 V1*Q5CEC5CEC3AEA3AEA
+0222 V2*QC9C9$95A5A95875B
+0223 V3*Q:57957957957957957957957957A57A57A57A57A57A579579
+0224 V4*QF2F2F2F2F2F2F2F2
+0230 M23    /PATTERN#0 ROWS 30-3F
+0231 V1*Q4BEB4BEB4#B#EB#4#B#EB#
+0232 V2*Q$B8$89BB#$B#9$9585
+0233 V3*Q:4694694694694694694694694#694#694#694#694#694#694#6A#4#6A#
+0234 V4*QF2F2F2F2F2F2F2F2
+0300 M30    /PATTERN#3 ROWS 00-0F
+0301 V1*Q5CEC5CEC3AEA3AEA
+0302 V2*Q9$95$595A$98$778
+0303 V3*Q:57957957957957957957957957A57A57A57A57A57A579579
+0304 V4*QF2F2F2F2F2F2F2F2
+0310 M31    /PATTERN#3 ROWS 10-1F
+0311 V1*Q4BEB4BEB29E929E9
+0312 V2*Q$84$4AA9$C9C8$8$
+0313 V3*Q:468468468468468468468468469469469469469469468468
+0314 V4*QF2F2F2F2F2F2F2F2
+0320 M32    /PATTERN#3 ROWS 20-2F
+0321 V1*Q5CEC5CEC3AEA3AEA
+0322 V2*Q8995$95A5A9587$7
+0323 V3*Q:57957957957957957957957957A57A57A57A57A57A579579
+0324 V4*QF2F2F2F2F2F2F2F2
+0330 M33    /PATTERN#3 ROWS 30-3F
+0331 V1*Q4BEB4BEB4#B#EB#4#B#EB#
+0332 V2*Q9$94$4BA49$98595
+0333 V3*Q:4694694694694694694694694#694#694#694#694#694#694#6A#4#6A#
+0334 V4*QF2F2F2F2F2F2F2F2
+0400 PB M40 /PATTERN#4 ROWS 00-0F
+0401 V1*Q3AEA3AEA4BEB4BEB
+0402 V2*QA$7B$7CECEDEC9BC
+0403 V3*Q:35735735735735735735735746846846846846846846A46A
+0404 V4*QF2F2F2F2F2F2F2F2
+0410 M41    /PATTERN#4 ROWS 10-1F
+0411 V1*Q29E929E95CEC5CEB
+0412 V2*Q$9BC$9BC$9BC$5B5
+0413 V3*Q:246246246246246246246246579579579579579579468468
+0414 V4*QF2F2F2F2F2F2F2F2
+0420 M42    /PATTERN#4 ROWS 20-2F
+0421 V1*Q3AEA3AEA4BEB4BEB
+0422 V2*QA$7B7ABE$EF7EEDC
+0423 V3*Q:357357357357357357357357468468468468468468469469
+0424 V4*QF2F2F2F2F2F2F2F2
+0430 M43    /PATTERN#4 ROWS 30-3F
+0431 V1*Q4#B#EB#4#B#EB#5CEC5CEC
+0432 V2*Q$9C9$9C9ED$C$5B5
+0433 V3*Q:24#624#624#624#624#624#624#624#6579579579579579579579579
+0434 V4*QF2F2F2F2F2F2F2F2
+0499 PC RB
+0500 PD M50 /PATTERN#5 ROWS 00-0F
+0501 V1*Q5CEC5CEC3AEA3AEA
+0502 V2*Q9$5C$5C$5C$5C$5C
+0503 V3*Q:57957957957957957957957957A57A57A57A57A57A578578
+0504 V4*QF2F2F2F2F2F2F2F2
+0510 M51    /PATTERN#5 ROWS 10-1F
+0511 V1*Q4BEB4BEB29E929E9
+0512 V2*Q8$4B$4B$4B$4B585
+0513 V3*Q:46846846846846846846846846A46A46A46A46A46A468468
+0514 V4*QF2F2F2F2F2F2F2F2
+0520 M52    /PATTERN#5 ROWS 20-2F
+0521 V1*Q5CEC5CEC3AEA3AEA
+0522 V2*Q95$C$5C$5C$5C$5C
+0523 V3*Q:57957957957957957957957957A57A57A57A57A57A579579
+0524 V4*QF2F2F2F2F2F2F2F2
+0530 M53    /PATTERN#5 ROWS 30-3C
+0531 V1*Q4BEB4BEB4#B#$B#$
+0532 V2*Q8$4B$4B$4#B#$4#B#
+0533 V3*Q:4684684684684684684684684#684#684#684#684#68
+0534 V4*QF2F2F2F2FF2F2
+</pre></a>
+<p style="clear:both">
+</p>
+<a tabindex='1' class='menuItem' href='JavaScript: alert("Fatal ERROR")' onclick='parse(3); return false' title='Three channels standart'>Load text and prepare to play (3 channels)</a>
+<a tabindex='1' class='menuItem' href='JavaScript: alert("Fatal ERROR")' onclick='parse(4); return false' title='With percussions featured channel'>(4 channels)</a></nobr><br/>
+
+<p style="clear:both">
+
+<section id="section1">
+
+<midi-visualizer type="piano-roll" 
+id="myVisualizer" 
+src=""
+>
+</midi-visualizer>
+  
+<midi-player
+  id="Media"
+  src=""
+  
+  
+  sound-font
+  
+  visualizer="#section1 midi-visualizer">
+</midi-player>
+
+</section>
+
+</p>
+
+<p>
+<a id="MediaDownload">Click here to download midi</a>
+</p>
+
+<textarea
+ tabindex='0'
+ id='Notes'
+ class='Notes'
+ cols='100'
+ rows='32'>
+0040 NS=70
+0050 PA
+0060 M1 12345
+</textarea><hr/>
+<pre id='res' class='txt'>
+</pre>
+
+<br>
+
+<p>
+<span>This modified code is using <a href="https://github.com/cifkao/html-midi-player">html-midi-player</a> to play MIDI.</span>
+</p>
+<p>
+<a style="padding:0px; margin:0px" href="https://code.google.com/archive/p/softrash/downloads">Original code - by Russel Alikberov, </a> <a href="https://code.google.com/archive/p/softrash/wikis/sol2midi.wiki">sol2midi.html</a>
+</p>
+
+</body>
